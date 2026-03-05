@@ -1,0 +1,1104 @@
+<!DOCTYPE html>
+<html lang="sk">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Fleet Manager Cloud</title>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+  <style>
+    :root{
+      --bg:#eef2f7; --card:#fff; --text:#0f172a; --muted:#475569;
+      --blue:#2563eb; --blue2:#1e40af; --red:#dc2626; --line:#e2e8f0; --soft:#f8fafc;
+      --ok:#16a34a;
+    }
+    body{font-family:Arial,system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:var(--bg);margin:0;padding:18px;color:var(--text);}
+    .container{max-width:1240px;margin:0 auto;}
+    .card{background:var(--card);border:1px solid rgba(226,232,240,.95);border-radius:14px;padding:14px;box-shadow:0 6px 18px rgba(15,23,42,.08);margin-bottom:14px;}
+    .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center;}
+    .space{justify-content:space-between;}
+    input,select,button{padding:9px 10px;border-radius:10px;border:1px solid var(--line);background:#fff;font-size:14px;box-sizing:border-box;}
+    input,select{width:100%;}
+    input:focus,select:focus{outline:none;border-color:rgba(37,99,235,.6);box-shadow:0 0 0 4px rgba(37,99,235,.08);}
+    button{cursor:pointer;border:none;background:var(--blue);color:#fff;font-weight:900;white-space:nowrap;}
+    button:hover{background:var(--blue2);}
+    button.ghost{background:transparent;border:1px solid var(--line);color:var(--text);}
+    button.ghost:hover{background:#f1f5f9;}
+    button.danger{background:var(--red);}
+    button.danger:hover{background:#b91c1c;}
+    .muted{color:var(--muted);font-size:13px;}
+    h1{margin:0;font-size:20px;}
+    .badge{display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border-radius:999px;border:1px solid var(--line);background:var(--soft);font-weight:900;font-size:12px;}
+    .hide{display:none!important;}
+    .smallNote{font-size:12px;color:var(--muted);}
+
+    /* Login overlay */
+    .overlay{position:fixed;inset:0;background:rgba(15,23,42,.55);display:flex;align-items:center;justify-content:center;padding:18px;z-index:9999;}
+    .authCard{width:min(560px,100%);background:#fff;border-radius:16px;border:1px solid var(--line);box-shadow:0 20px 60px rgba(15,23,42,.25);padding:16px;}
+    .authTitle{font-weight:900;font-size:18px;margin:0 0 6px 0;}
+    .err{display:none;margin-top:8px;color:var(--red);font-weight:900;font-size:13px;}
+    .ok{color:var(--ok);font-weight:900;}
+
+    /* Dashboard */
+    .kpiGrid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:10px;}
+    @media (max-width: 980px){.kpiGrid{grid-template-columns:1fr 1fr;}}
+    @media (max-width: 560px){.kpiGrid{grid-template-columns:1fr;}}
+    .kpi{border:1px solid var(--line);border-radius:14px;padding:10px;background:#fff;}
+    .kpi .t{font-weight:900;color:var(--muted);font-size:12px;}
+    .kpi .v{font-weight:900;font-size:18px;margin-top:4px;}
+    .kpi .s{font-weight:900;color:var(--muted);font-size:12px;margin-top:6px;}
+
+    .chartGrid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:12px;}
+    @media (max-width: 980px){.chartGrid{grid-template-columns:1fr;}}
+    canvas{max-height:280px;}
+
+    /* Alerts */
+    .alerts{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px;}
+    @media (max-width: 900px){.alerts{grid-template-columns:1fr;}}
+    .alertBox{border:1px solid var(--line);border-radius:14px;padding:10px;background:#fff;}
+    .alertBox h4{margin:0 0 6px 0;font-size:13px;color:var(--muted);display:flex;justify-content:space-between;align-items:center;font-weight:900;}
+    .alertList{margin:0;padding-left:18px;font-size:13px;line-height:1.35;}
+    .alertList li{cursor:pointer;padding:3px 0;}
+    .alertList li:hover{text-decoration:underline;}
+    .count{font-weight:900;padding:3px 8px;border-radius:999px;border:1px solid var(--line);background:var(--soft);font-size:12px;}
+
+    /* Vehicles */
+    .vehicleHeader{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:center;}
+    .vehicleTitle{display:flex;gap:10px;flex-wrap:wrap;align-items:baseline;}
+    .spz{font-weight:900;font-size:18px;letter-spacing:.3px;}
+    .model{font-weight:900;color:var(--muted);font-size:14px;}
+    .details{display:none;margin-top:12px;border-top:1px dashed var(--line);padding-top:12px;}
+    .section{background:#f8fafc;border:1px solid var(--line);border-radius:14px;padding:12px;margin-top:10px;}
+    .miniHead{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:center;font-weight:900;}
+    .miniToggle{border:1px solid var(--line);background:#fff;color:var(--text);font-weight:900;padding:6px 10px;border-radius:10px;}
+    .miniToggle:hover{background:#f1f5f9;}
+    .miniBody{display:none;margin-top:10px;}
+
+    .formline{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px;align-items:end;}
+    .full{grid-column:1/-1;}
+
+    .statusLine{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:12px;}
+    @media (max-width: 900px){.statusLine{grid-template-columns:1fr 1fr;}}
+    .statusBox{border:1px solid var(--line);border-radius:12px;padding:10px;background:#f8fafc;display:flex;flex-direction:column;gap:6px;}
+    .label{font-size:12px;font-weight:900;color:var(--muted);}
+    .pill{display:inline-block;padding:4px 8px;border-radius:999px;border:1px solid var(--line);font-weight:900;font-size:12px;background:#fff;}
+    .okpill{border-color:#86efac;background:#dcfce7;}
+    .warnpill{border-color:#fdba74;background:#ffedd5;}
+    .badpill{border-color:#fca5a5;background:#fee2e2;}
+    .warning30{background:#ffedd5;border-color:#fdba74;}
+    .warning20{background:#fee2e2;border-color:#fca5a5;}
+    @keyframes blinkExpired{0%{background:#fee2e2;}50%{background:#ffedd5;}100%{background:#fee2e2;}}
+    .expired{animation:blinkExpired 1s infinite;border-color:#fb7185!important;}
+    @keyframes blinkService{0%{background:#fff;}50%{background:#ffedd5;}100%{background:#fff;}}
+    .serviceAlert{animation:blinkService 1s infinite;}
+
+    .table{width:100%;border-collapse:collapse;margin-top:10px;font-size:13px;background:#fff;border:1px solid var(--line);border-radius:12px;overflow:hidden;}
+    .table th,.table td{border-bottom:1px solid var(--line);padding:8px 6px;text-align:left;vertical-align:top;}
+    .table th{color:var(--muted);font-size:12px;font-weight:900;background:#f8fafc;}
+    .actions{display:flex;gap:6px;flex-wrap:wrap;}
+    .actions button{padding:6px 8px;border-radius:10px;font-size:12px;}
+  </style>
+</head>
+
+<body>
+  <!-- LOGIN -->
+  <div id="loginOverlay" class="overlay">
+    <div class="authCard">
+      <div class="row space">
+        <div>
+          <div class="authTitle">Fleet Manager Cloud</div>
+          <div class="muted">Prihlásenie (Supabase Auth) • Dashboard • Role admin/user</div>
+        </div>
+        <div class="badge">ONLINE</div>
+      </div>
+
+      <form id="loginForm" class="formline" style="margin-top:12px;">
+        <div class="full">
+          <div class="muted">Email</div>
+          <input id="email" type="email" autocomplete="username" required />
+        </div>
+        <div class="full">
+          <div class="muted">Heslo</div>
+          <input id="password" type="password" autocomplete="current-password" required />
+        </div>
+        <div class="full row" style="justify-content:flex-end;">
+          <button type="submit">Prihlásiť</button>
+        </div>
+        <div id="loginErr" class="err">Prihlásenie zlyhalo.</div>
+      </form>
+
+      <div class="smallNote" style="margin-top:10px;">
+        Účty: Supabase → Authentication → Users • Roly: <b>public.user_profiles</b>
+      </div>
+    </div>
+  </div>
+
+  <!-- APP -->
+  <div id="app" class="container" style="display:none;">
+
+    <!-- TOP BAR -->
+    <div class="card">
+      <div class="row space">
+        <div>
+          <h1>🚗 Fleet Manager Cloud</h1>
+          <div class="muted">Online databáza (Supabase) • strediská • upozornenia • dashboard</div>
+        </div>
+        <div class="row" style="min-width:360px;justify-content:flex-end;">
+          <select id="centerFilter" style="min-width:220px;">
+            <option value="ALL">Všetky strediská</option>
+            <option value="Košice">Košice</option>
+            <option value="Žilina">Žilina</option>
+            <option value="Nitra">Nitra</option>
+            <option value="Bratislava">Bratislava</option>
+          </select>
+          <button class="ghost" id="refreshBtn" type="button">Obnoviť</button>
+          <button class="ghost" id="logoutBtn" type="button">Odhlásiť</button>
+        </div>
+      </div>
+
+      <div class="row" style="margin-top:10px;">
+        <input id="search" placeholder="Vyhľadať podľa ŠPZ..." style="max-width:320px;" />
+        <label class="badge" style="gap:8px;">
+          <input id="onlyProblems" type="checkbox" style="width:auto;" />
+          Len problémové
+        </label>
+        <span class="badge" id="roleBadge">ROLE: —</span>
+        <span class="muted" id="userInfo"></span>
+      </div>
+    </div>
+
+    <!-- DASHBOARD -->
+    <div class="card">
+      <div class="row space">
+        <div>
+          <div style="font-weight:900;">📊 Dashboard (náklady)</div>
+          <div class="muted">Palivo + servis • obdobie + stredisko</div>
+        </div>
+        <div class="row">
+          <select id="dashPreset" style="min-width:220px;">
+            <option value="this_month">Tento mesiac</option>
+            <option value="last_month">Minulý mesiac</option>
+            <option value="this_year">Tento rok</option>
+            <option value="custom">Vlastné obdobie</option>
+          </select>
+          <input id="dashFrom" type="date" style="min-width:170px;" />
+          <input id="dashTo" type="date" style="min-width:170px;" />
+          <button id="dashApply" type="button">Použiť</button>
+        </div>
+      </div>
+
+      <div class="kpiGrid">
+        <div class="kpi">
+          <div class="t">Palivo (€)</div>
+          <div class="v" id="kpiFuel">0.00</div>
+          <div class="s" id="kpiPeriod">—</div>
+        </div>
+        <div class="kpi">
+          <div class="t">Servis (€)</div>
+          <div class="v" id="kpiService">0.00</div>
+          <div class="s" id="kpiCenter">—</div>
+        </div>
+        <div class="kpi">
+          <div class="t">Spolu (€)</div>
+          <div class="v" id="kpiTotal">0.00</div>
+          <div class="s" id="kpiVehiclesSub">—</div>
+        </div>
+        <div class="kpi">
+          <div class="t">Počet vozidiel</div>
+          <div class="v" id="kpiVehicles">0</div>
+          <div class="s">v aktuálnom filtri</div>
+        </div>
+      </div>
+
+      <div class="chartGrid">
+        <div class="card" style="margin:0;">
+          <div style="font-weight:900;margin-bottom:8px;">Náklady podľa stredísk</div>
+          <canvas id="chartByCenter"></canvas>
+        </div>
+        <div class="card" style="margin:0;">
+          <div style="font-weight:900;margin-bottom:8px;">Náklady po mesiacoch</div>
+          <canvas id="chartByMonth"></canvas>
+        </div>
+      </div>
+
+      <div style="margin-top:12px;">
+        <div class="row space">
+          <div style="font-weight:900;">Top 10 najdrahších vozidiel</div>
+          <div class="muted">v zvolenom období (palivo+servis)</div>
+        </div>
+        <table class="table">
+          <thead>
+            <tr>
+              <th>ŠPZ</th><th>Model</th><th>Stredisko</th><th>Palivo (€)</th><th>Servis (€)</th><th>Spolu (€)</th>
+            </tr>
+          </thead>
+          <tbody id="topVehiclesBody">
+            <tr><td colspan="6" class="muted">Načítavam…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ALERTS -->
+    <div class="card">
+      <div class="row space">
+        <div style="font-weight:900;">🔔 Upozornenia</div>
+        <div class="muted">Klikni → presunie na vozidlo</div>
+      </div>
+
+      <div class="alerts">
+        <div class="alertBox">
+          <h4>⚠ Expirácie <span class="count" id="expCount">0</span></h4>
+          <ul class="alertList" id="expList"></ul>
+        </div>
+        <div class="alertBox">
+          <h4>🛠 Plánované servisy <span class="count" id="planCount">0</span></h4>
+          <ul class="alertList" id="planList"></ul>
+        </div>
+      </div>
+    </div>
+
+    <!-- ADD VEHICLE (ADMIN only) -->
+    <div class="card" id="addVehicleCard">
+      <div style="font-weight:900;margin-bottom:10px;">➕ Pridať vozidlo (len admin)</div>
+      <form id="vehicleForm" class="formline">
+        <div>
+          <div class="muted">Stredisko</div>
+          <select id="center" required>
+            <option value="" disabled selected>Vyber stredisko</option>
+            <option value="Košice">Košice</option>
+            <option value="Žilina">Žilina</option>
+            <option value="Nitra">Nitra</option>
+            <option value="Bratislava">Bratislava</option>
+          </select>
+        </div>
+        <div><div class="muted">ŠPZ</div><input id="spz" required /></div>
+        <div><div class="muted">Model</div><input id="model" required /></div>
+        <div><div class="muted">PZP do</div><input id="pzp" type="date" /></div>
+        <div><div class="muted">STK do</div><input id="stk" type="date" /></div>
+        <div><div class="muted">EK do</div><input id="ek" type="date" /></div>
+        <div><div class="muted">MV do</div><input id="mv" type="date" /></div>
+        <div class="full row" style="justify-content:flex-start;">
+          <button type="submit">Pridať</button>
+          <span id="addOk" class="ok" style="display:none;">Uložené ✅</span>
+        </div>
+      </form>
+      <div class="smallNote">Admin rola sa číta z <b>public.user_profiles</b>.</div>
+    </div>
+
+    <!-- VEHICLES LIST -->
+    <div id="vehicles"></div>
+  </div>
+
+<script>
+  // =========================
+  // Supabase config (tvoje hodnoty)
+  // =========================
+  const SUPABASE_URL = "https://jvywldumhcbvysymrbgj.supabase.co";
+  const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_jburU9R5MRd_iIV8z6rugw_4h7bd4xX";
+  const client = window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
+
+  // =========================
+  // Helpers
+  // =========================
+  const $ = (id)=>document.getElementById(id);
+  function esc(s){return String(s??"").replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;").replaceAll("'","&#039;");}
+  function num(x){ const n=Number(x); return Number.isFinite(n)?n:0; }
+  function money(x){ const n=Number(x); return Number.isFinite(n)?n.toFixed(2):"0.00"; }
+  function parseDateSafe(s){ if(!s) return null; const d=new Date(s); return isNaN(d.getTime())?null:d; }
+  function isoDate(d){ return d.toISOString().slice(0,10); }
+  function monthKey(iso){ return String(iso||"").slice(0,7); } // YYYY-MM
+
+  function monthList(fromISO,toISO){
+    const from = new Date(fromISO); from.setHours(0,0,0,0);
+    const to = new Date(toISO); to.setHours(0,0,0,0);
+    const cur = new Date(from.getFullYear(), from.getMonth(), 1);
+    const end = new Date(to.getFullYear(), to.getMonth(), 1);
+    const out=[];
+    while(cur<=end){
+      out.push(`${cur.getFullYear()}-${String(cur.getMonth()+1).padStart(2,"0")}`);
+      cur.setMonth(cur.getMonth()+1);
+    }
+    return out;
+  }
+
+  function daysLeft(dateStr){
+    const d = parseDateSafe(dateStr);
+    if(!d) return null;
+    const today = new Date(); today.setHours(0,0,0,0);
+    const end = new Date(d); end.setHours(0,0,0,0);
+    return Math.floor((end-today)/(1000*60*60*24));
+  }
+  function expiryClass(dateStr){
+    const left=daysLeft(dateStr);
+    if(left===null) return "";
+    if(left<0) return "expired";
+    if(left<20) return "warning20";
+    if(left<30) return "warning30";
+    return "";
+  }
+  function expiryPill(dateStr){
+    const left=daysLeft(dateStr);
+    if(left===null) return `<span class="pill">—</span>`;
+    if(left<0) return `<span class="pill badpill">po termíne (${left} d)</span>`;
+    if(left<20) return `<span class="pill badpill">${left} dní</span>`;
+    if(left<30) return `<span class="pill warnpill">${left} dní</span>`;
+    return `<span class="pill okpill">${left} dní</span>`;
+  }
+
+  // =========================
+  // UI open state (karty/mini ostanú otvorené)
+  // =========================
+  const openState = { vehicles:new Set(), mini:new Map() };
+  const miniKeys=["fuel","service","closure","plan"];
+  function getMiniSet(id){ if(!openState.mini.has(id)) openState.mini.set(id,new Set()); return openState.mini.get(id); }
+  function isVehOpen(id){ return openState.vehicles.has(id); }
+  function setVehOpen(id,on){ on?openState.vehicles.add(id):openState.vehicles.delete(id); }
+  function isMiniOpen(id,k){ return getMiniSet(id).has(k); }
+  function setMiniOpen(id,k,on){ const s=getMiniSet(id); on?s.add(k):s.delete(k); }
+  function applyOpenState(id){
+    const details = document.getElementById("details-"+id);
+    const btn = document.getElementById("veh-btn-"+id);
+    if(details) details.style.display = isVehOpen(id) ? "block" : "none";
+    if(btn) btn.textContent = isVehOpen(id) ? "▲" : "▼";
+
+    for(const k of miniKeys){
+      const body = document.getElementById(`mini-${k}-${id}`);
+      const b = document.getElementById(`mini-${k}-btn-${id}`);
+      const open = isMiniOpen(id,k);
+      if(body) body.style.display = open ? "block" : "none";
+      if(b) b.textContent = open ? "▲" : "▼";
+    }
+  }
+
+  // =========================
+  // App state
+  // =========================
+  let currentUser=null;
+  let currentRole="user";
+  let vehicles=[];
+  let chartCenter=null;
+  let chartMonth=null;
+
+  function showLogin(){ $("loginOverlay").style.display="flex"; $("app").style.display="none"; }
+  function showApp(){ $("loginOverlay").style.display="none"; $("app").style.display="block"; }
+  function setRoleUI(){
+    $("roleBadge").textContent = `ROLE: ${String(currentRole||"user").toUpperCase()}`;
+    $("addVehicleCard").classList.toggle("hide", currentRole!=="admin");
+  }
+
+  async function ensureUserProfile(user){
+    // insert profil (ak už existuje, ignorujeme unique chybu)
+    const { error: insErr } = await client.from("user_profiles").insert({
+      user_id: user.id,
+      email: user.email,
+      role: "user"
+    });
+
+    // 23505 = unique_violation (profil už existuje) -> ignor
+    if(insErr && insErr.code !== "23505"){
+      // ak tu padne chyba, stále sa dá pokračovať, ale vypíšeme do konzoly
+      console.warn("user_profiles insert error:", insErr);
+    }
+
+    const { data, error } = await client
+      .from("user_profiles")
+      .select("role")
+      .eq("user_id", user.id)
+      .maybeSingle();
+
+    if(error) throw error;
+    return data?.role || "user";
+  }
+
+  // =========================
+  // Login
+  // =========================
+  $("loginForm").addEventListener("submit", async (e)=>{
+    e.preventDefault();
+    $("loginErr").style.display="none";
+    try{
+      const email=$("email").value.trim();
+      const password=$("password").value;
+
+      const { data, error } = await client.auth.signInWithPassword({ email, password });
+      if(error) throw error;
+
+      currentUser=data.user;
+      $("userInfo").textContent = currentUser?.email ? `Prihlásený: ${currentUser.email}` : "";
+
+      currentRole = await ensureUserProfile(currentUser);
+      setRoleUI();
+
+      showApp();
+      initDashboardDates();
+      await loadAndRenderAll();
+    }catch(err){
+      console.error(err);
+      $("loginErr").textContent = "Prihlásenie zlyhalo: " + (err?.message || String(err));
+      $("loginErr").style.display="block";
+    }
+  });
+
+  $("logoutBtn").addEventListener("click", async ()=>{
+    await client.auth.signOut();
+    currentUser=null; currentRole="user";
+    showLogin();
+  });
+
+  async function boot(){
+    const { data } = await client.auth.getSession();
+    if(data?.session?.user){
+      currentUser = data.session.user;
+      $("userInfo").textContent = currentUser?.email ? `Prihlásený: ${currentUser.email}` : "";
+      try{ currentRole = await ensureUserProfile(currentUser); }
+      catch(e){ console.error(e); currentRole="user"; }
+      setRoleUI();
+      showApp();
+      initDashboardDates();
+      await loadAndRenderAll();
+    }else{
+      showLogin();
+    }
+  }
+
+  // =========================
+  // Data load
+  // =========================
+  async function loadAllVehicles(){
+    // Načítame tabuľky separátne (spoľahlivé, bez nested select problémov)
+    const { data: vData, error: vErr } = await client
+      .from("vehicles")
+      .select("*")
+      .order("spz",{ascending:true});
+    if(vErr) throw vErr;
+
+    const { data: fData, error: fErr } = await client.from("fuel_logs").select("*");
+    if(fErr) throw fErr;
+
+    const { data: sData, error: sErr } = await client.from("service_logs").select("*");
+    if(sErr) throw sErr;
+
+    const { data: cData, error: cErr } = await client.from("closures").select("*");
+    if(cErr) throw cErr;
+
+    const { data: pData, error: pErr } = await client.from("plans").select("*");
+    if(pErr) throw pErr;
+
+    const fuelByVeh = new Map();
+    const serviceByVeh = new Map();
+    const closureByVeh = new Map();
+    const planByVeh = new Map();
+
+    for(const f of (fData||[])){ if(!fuelByVeh.has(f.vehicle_id)) fuelByVeh.set(f.vehicle_id,[]); fuelByVeh.get(f.vehicle_id).push(f); }
+    for(const s of (sData||[])){ if(!serviceByVeh.has(s.vehicle_id)) serviceByVeh.set(s.vehicle_id,[]); serviceByVeh.get(s.vehicle_id).push(s); }
+    for(const c of (cData||[])){ if(!closureByVeh.has(c.vehicle_id)) closureByVeh.set(c.vehicle_id,[]); closureByVeh.get(c.vehicle_id).push(c); }
+    for(const p of (pData||[])){ if(!planByVeh.has(p.vehicle_id)) planByVeh.set(p.vehicle_id,[]); planByVeh.get(p.vehicle_id).push(p); }
+
+    vehicles = (vData||[]).map(v=>({
+      ...v,
+      fuel: (fuelByVeh.get(v.id)||[]),
+      service: (serviceByVeh.get(v.id)||[]),
+      closure: (closureByVeh.get(v.id)||[]),
+      plans: (planByVeh.get(v.id)||[])
+    }));
+  }
+
+  // =========================
+  // Filters
+  // =========================
+  $("search").addEventListener("input", ()=>renderVehiclesAndAlerts());
+  $("onlyProblems").addEventListener("change", ()=>renderVehiclesAndAlerts());
+  $("centerFilter").addEventListener("change", ()=>{ renderVehiclesAndAlerts(); refreshDashboard(); });
+  $("refreshBtn").addEventListener("click", loadAndRenderAll);
+
+  // =========================
+  // Admin: add vehicle
+  // =========================
+  $("vehicleForm").addEventListener("submit", async (e)=>{
+    e.preventDefault();
+    $("addOk").style.display="none";
+
+    const payload={
+      center:$("center").value,
+      spz:$("spz").value.trim().toUpperCase(),
+      model:$("model").value.trim(),
+      pzp:$("pzp").value||null,
+      stk:$("stk").value||null,
+      ek:$("ek").value||null,
+      mv:$("mv").value||null
+    };
+    if(!payload.center || !payload.spz || !payload.model){
+      alert("Vyplň stredisko, ŠPZ a model.");
+      return;
+    }
+
+    try{
+      const { error } = await client.from("vehicles").insert(payload);
+      if(error) throw error;
+
+      $("centerFilter").value = payload.center;
+
+      $("center").value=""; $("spz").value=""; $("model").value="";
+      $("pzp").value=""; $("stk").value=""; $("ek").value=""; $("mv").value="";
+
+      $("addOk").style.display="inline";
+      setTimeout(()=>$("addOk").style.display="none", 1200);
+
+      await loadAndRenderAll();
+    }catch(err){
+      console.error(err);
+      alert("Nepodarilo sa pridať vozidlo (RLS/admin alebo duplicitná ŠPZ).");
+    }
+  });
+
+  async function deleteVehicle(id){
+    if(currentRole!=="admin") return alert("Nemáš práva (admin).");
+    if(!confirm("Odstrániť vozidlo?")) return;
+
+    const { error } = await client.from("vehicles").delete().eq("id",id);
+    if(error){ console.error(error); return alert("Chyba pri mazaní (RLS)."); }
+
+    openState.vehicles.delete(id);
+    openState.mini.delete(id);
+
+    await loadAndRenderAll();
+  }
+
+  // =========================
+  // Miniapps CRUD
+  // =========================
+  async function addFuel(vehicleId){
+    const date=$(`fuel-date-${vehicleId}`).value;
+    const person=$(`fuel-person-${vehicleId}`).value;
+    const km=$(`fuel-km-${vehicleId}`).value;
+    const unit=$(`fuel-unit-${vehicleId}`).value;
+    const liters=$(`fuel-liters-${vehicleId}`).value;
+
+    if(!date || unit==="" || liters==="") return alert("Vyplň dátum, cenu a litre.");
+
+    const total=num(unit)*num(liters);
+    const { error } = await client.from("fuel_logs").insert({
+      vehicle_id:vehicleId,
+      date,
+      person: person.trim()||null,
+      km: km===""?null:num(km),
+      unit_price:num(unit),
+      liters:num(liters),
+      total
+    });
+    if(error){ console.error(error); return alert("Chyba pri ukladaní tankovania."); }
+
+    setVehOpen(vehicleId,true); setMiniOpen(vehicleId,"fuel",true);
+    await loadAndRenderAll({keepOpenId:vehicleId});
+  }
+
+  async function addService(vehicleId){
+    const date=$(`srv-date-${vehicleId}`).value;
+    const description=$(`srv-desc-${vehicleId}`).value.trim();
+    const cost=$(`srv-cost-${vehicleId}`).value;
+
+    if(!date || !description || cost==="") return alert("Vyplň dátum, popis a cenu.");
+
+    const { error } = await client.from("service_logs").insert({
+      vehicle_id:vehicleId,
+      date,
+      description,
+      cost:num(cost)
+    });
+    if(error){ console.error(error); return alert("Chyba pri ukladaní servisu."); }
+
+    setVehOpen(vehicleId,true); setMiniOpen(vehicleId,"service",true);
+    await loadAndRenderAll({keepOpenId:vehicleId});
+  }
+
+  async function addClosure(vehicleId){
+    const month=$(`cl-month-${vehicleId}`).value;
+    const start=$(`cl-start-${vehicleId}`).value;
+    const end=$(`cl-end-${vehicleId}`).value;
+    const liters=$(`cl-liters-${vehicleId}`).value;
+
+    if(!month || start==="" || end==="" || liters==="") return alert("Vyplň mesiac, km a litre.");
+
+    const km=num(end)-num(start);
+    if(km<=0) return alert("Koncový km musí byť väčší ako počiatočný.");
+
+    const cons=(num(liters)/km)*100;
+
+    const { error } = await client.from("closures").insert({
+      vehicle_id:vehicleId,
+      month,
+      start_km:num(start),
+      end_km:num(end),
+      liters:num(liters),
+      km,
+      cons
+    });
+    if(error){ console.error(error); return alert("Chyba pri ukladaní uzávierky."); }
+
+    setVehOpen(vehicleId,true); setMiniOpen(vehicleId,"closure",true);
+    await loadAndRenderAll({keepOpenId:vehicleId});
+  }
+
+  async function addPlan(vehicleId){
+    const date=$(`pl-date-${vehicleId}`).value;
+    const description=$(`pl-desc-${vehicleId}`).value.trim();
+    if(!date || !description) return alert("Vyplň dátum a popis.");
+
+    const { error } = await client.from("plans").insert({
+      vehicle_id:vehicleId,
+      date,
+      description
+    });
+    if(error){ console.error(error); return alert("Chyba pri ukladaní plánu."); }
+
+    setVehOpen(vehicleId,true); setMiniOpen(vehicleId,"plan",true);
+    await loadAndRenderAll({keepOpenId:vehicleId});
+  }
+
+  async function markPlanDone(id, vehicleId){
+    const { error } = await client.from("plans")
+      .update({ done:true, done_at: isoDate(new Date()) })
+      .eq("id",id);
+    if(error){ console.error(error); return alert("Chyba pri update plánu."); }
+
+    setVehOpen(vehicleId,true); setMiniOpen(vehicleId,"plan",true);
+    await loadAndRenderAll({keepOpenId:vehicleId});
+  }
+
+  // =========================
+  // Toggles + jump
+  // =========================
+  function toggleDetails(id){ setVehOpen(id,!isVehOpen(id)); applyOpenState(id); }
+  function toggleMini(id,k){ setMiniOpen(id,k,!isMiniOpen(id,k)); setVehOpen(id,true); applyOpenState(id); }
+
+  function jumpToVehicle(id){
+    setVehOpen(id,true);
+    renderVehiclesAndAlerts();
+    setTimeout(()=>{
+      applyOpenState(id);
+      const el=document.getElementById("vehicle-"+id);
+      if(el) el.scrollIntoView({behavior:"smooth", block:"start"});
+    },0);
+  }
+
+  // =========================
+  // Alerts + problem detection
+  // =========================
+  function vehicleProblem(v){
+    for(const k of ["pzp","stk","ek","mv"]){
+      const left=daysLeft(v[k]);
+      if(left!==null && left<30) return true;
+    }
+    for(const p of (v.plans||[])){
+      if(p.done) continue;
+      const left=daysLeft(p.date);
+      if(left!==null && left<=5) return true;
+    }
+    return false;
+  }
+  function planMakesCardBlink(v){
+    for(const p of (v.plans||[])){
+      if(p.done) continue;
+      const left=daysLeft(p.date);
+      if(left!==null && left>=0 && left<=5) return true;
+    }
+    return false;
+  }
+
+  function renderAlerts(list){
+    const expItems=[], planItems=[];
+    for(const v of list){
+      for(const k of ["pzp","stk","ek","mv"]){
+        const left=daysLeft(v[k]);
+        if(left===null) continue;
+        const label=k.toUpperCase();
+        if(left<0) expItems.push({id:v.id, text:`❌ ${v.spz} • ${label} po termíne (${left} d)`});
+        else if(left<20) expItems.push({id:v.id, text:`🔴 ${v.spz} • ${label} do ${left} dní`});
+        else if(left<30) expItems.push({id:v.id, text:`🟠 ${v.spz} • ${label} do ${left} dní`});
+      }
+      for(const p of (v.plans||[])){
+        if(p.done) continue;
+        const left=daysLeft(p.date);
+        if(left!==null && left>=0 && left<=5) planItems.push({id:v.id, text:`🛠 ${v.spz} • ${left} dní: ${p.description}`});
+        if(left!==null && left<0) planItems.push({id:v.id, text:`❌ ${v.spz} • po termíne: ${p.description}`});
+      }
+    }
+    $("expCount").textContent=String(expItems.length);
+    $("planCount").textContent=String(planItems.length);
+
+    $("expList").innerHTML = expItems.length
+      ? expItems.map(x=>`<li onclick="jumpToVehicle('${x.id}')">${esc(x.text)}</li>`).join("")
+      : `<li style="cursor:default;">Bez upozornení ✅</li>`;
+
+    $("planList").innerHTML = planItems.length
+      ? planItems.map(x=>`<li onclick="jumpToVehicle('${x.id}')">${esc(x.text)}</li>`).join("")
+      : `<li style="cursor:default;">Bez upozornení ✅</li>`;
+  }
+
+  // =========================
+  // Render vehicles
+  // =========================
+  function renderVehiclesAndAlerts(){
+    const cf=$("centerFilter").value||"ALL";
+    const q=($("search").value||"").trim().toLowerCase();
+    const onlyProblems=$("onlyProblems").checked;
+
+    const filtered = vehicles
+      .filter(v=> cf==="ALL" ? true : String(v.center)===cf)
+      .filter(v=> !q || String(v.spz||"").toLowerCase().includes(q))
+      .filter(v=> !onlyProblems || vehicleProblem(v));
+
+    renderAlerts(filtered);
+
+    const html = filtered.map(v=>{
+      const vehBtn=isVehOpen(v.id)?"▲":"▼";
+      const blink=planMakesCardBlink(v)?"serviceAlert":"";
+      const canDelete=(currentRole==="admin");
+
+      return `
+        <div class="card ${blink}" id="vehicle-${v.id}">
+          <div class="vehicleHeader">
+            <div class="vehicleTitle">
+              <span class="spz">${esc(v.spz)}</span>
+              <span class="model">${esc(v.model)}</span>
+              <span class="badge">Stredisko: ${esc(v.center)}</span>
+            </div>
+            <div class="row">
+              <button class="ghost" id="veh-btn-${v.id}" type="button" onclick="toggleDetails('${v.id}')">${vehBtn}</button>
+              ${canDelete ? `<button class="danger" type="button" onclick="deleteVehicle('${v.id}')">Odstrániť</button>` : ``}
+            </div>
+          </div>
+
+          <div class="statusLine">
+            <div class="statusBox ${expiryClass(v.pzp)}"><div class="label">PZP do</div><div><b>${esc(v.pzp||"—")}</b></div><div>${expiryPill(v.pzp)}</div></div>
+            <div class="statusBox ${expiryClass(v.stk)}"><div class="label">STK do</div><div><b>${esc(v.stk||"—")}</b></div><div>${expiryPill(v.stk)}</div></div>
+            <div class="statusBox ${expiryClass(v.ek)}"><div class="label">EK do</div><div><b>${esc(v.ek||"—")}</b></div><div>${expiryPill(v.ek)}</div></div>
+            <div class="statusBox ${expiryClass(v.mv)}"><div class="label">MV do</div><div><b>${esc(v.mv||"—")}</b></div><div>${expiryPill(v.mv)}</div></div>
+          </div>
+
+          <div id="details-${v.id}" class="details">
+            ${renderMiniFuel(v)}
+            ${renderMiniService(v)}
+            ${renderMiniClosure(v)}
+            ${renderMiniPlan(v)}
+          </div>
+        </div>
+      `;
+    }).join("");
+
+    $("vehicles").innerHTML = html || `<div class="card"><div class="muted">Žiadne vozidlá v tomto filtri.</div></div>`;
+
+    for(const v of filtered) applyOpenState(v.id);
+
+    // KPI "Počet vozidiel" nech sedí s filtrom
+    $("kpiVehicles").textContent = String(filtered.length);
+  }
+
+  function renderMiniFuel(v){
+    const open=isMiniOpen(v.id,"fuel");
+    const rows = (v.fuel||[]).slice().sort((a,b)=>String(b.date).localeCompare(String(a.date)));
+    return `
+      <div class="section">
+        <div class="miniHead">
+          <span>⛽ Tankovanie</span>
+          <button class="miniToggle" id="mini-fuel-btn-${v.id}" type="button" onclick="toggleMini('${v.id}','fuel')">${open?"▲":"▼"}</button>
+        </div>
+        <div class="miniBody" id="mini-fuel-${v.id}" style="display:${open?"block":"none"};">
+          <div class="formline">
+            <div><div class="muted">Dátum</div><input id="fuel-date-${v.id}" type="date" /></div>
+            <div><div class="muted">Meno</div><input id="fuel-person-${v.id}" /></div>
+            <div><div class="muted">Km</div><input id="fuel-km-${v.id}" type="number" step="1" /></div>
+            <div><div class="muted">€/L</div><input id="fuel-unit-${v.id}" type="number" step="0.001" /></div>
+            <div><div class="muted">L</div><input id="fuel-liters-${v.id}" type="number" step="0.01" /></div>
+            <div><button type="button" onclick="addFuel('${v.id}')">Pridať</button></div>
+          </div>
+
+          ${rows.length ? `
+            <table class="table">
+              <thead><tr><th>Dátum</th><th>Meno</th><th>Km</th><th>€/L</th><th>L</th><th>Spolu</th></tr></thead>
+              <tbody>
+                ${rows.map(f=>`
+                  <tr>
+                    <td>${esc(f.date)}</td><td>${esc(f.person||"")}</td><td>${esc(f.km??"")}</td>
+                    <td>${money(f.unit_price)}</td><td>${money(f.liters)}</td><td><b>${money(f.total)} €</b></td>
+                  </tr>
+                `).join("")}
+              </tbody>
+            </table>
+          ` : `<div class="muted" style="margin-top:8px;">Zatiaľ bez záznamov.</div>`}
+        </div>
+      </div>
+    `;
+  }
+
+  function renderMiniService(v){
+    const open=isMiniOpen(v.id,"service");
+    const rows = (v.service||[]).slice().sort((a,b)=>String(b.date).localeCompare(String(a.date)));
+    return `
+      <div class="section">
+        <div class="miniHead">
+          <span>🔧 Servis</span>
+          <button class="miniToggle" id="mini-service-btn-${v.id}" type="button" onclick="toggleMini('${v.id}','service')">${open?"▲":"▼"}</button>
+        </div>
+        <div class="miniBody" id="mini-service-${v.id}" style="display:${open?"block":"none"};">
+          <div class="formline">
+            <div><div class="muted">Dátum</div><input id="srv-date-${v.id}" type="date" /></div>
+            <div class="full"><div class="muted">Popis</div><input id="srv-desc-${v.id}" /></div>
+            <div><div class="muted">Cena (€)</div><input id="srv-cost-${v.id}" type="number" step="0.01" /></div>
+            <div><button type="button" onclick="addService('${v.id}')">Pridať</button></div>
+          </div>
+
+          ${rows.length ? `
+            <table class="table">
+              <thead><tr><th>Dátum</th><th>Popis</th><th>Cena</th></tr></thead>
+              <tbody>
+                ${rows.map(s=>`
+                  <tr>
+                    <td>${esc(s.date)}</td><td>${esc(s.description)}</td><td><b>${money(s.cost)} €</b></td>
+                  </tr>
+                `).join("")}
+              </tbody>
+            </table>
+          ` : `<div class="muted" style="margin-top:8px;">Zatiaľ bez záznamov.</div>`}
+        </div>
+      </div>
+    `;
+  }
+
+  function renderMiniClosure(v){
+    const open=isMiniOpen(v.id,"closure");
+    const rows = (v.closure||[]).slice().sort((a,b)=>String(b.month).localeCompare(String(a.month)));
+    return `
+      <div class="section">
+        <div class="miniHead">
+          <span>📊 Mesačná uzávierka</span>
+          <button class="miniToggle" id="mini-closure-btn-${v.id}" type="button" onclick="toggleMini('${v.id}','closure')">${open?"▲":"▼"}</button>
+        </div>
+        <div class="miniBody" id="mini-closure-${v.id}" style="display:${open?"block":"none"};">
+          <div class="formline">
+            <div><div class="muted">Mesiac</div><input id="cl-month-${v.id}" type="month" /></div>
+            <div><div class="muted">Start km</div><input id="cl-start-${v.id}" type="number" step="1" /></div>
+            <div><div class="muted">End km</div><input id="cl-end-${v.id}" type="number" step="1" /></div>
+            <div><div class="muted">Litre</div><input id="cl-liters-${v.id}" type="number" step="0.01" /></div>
+            <div><button type="button" onclick="addClosure('${v.id}')">Pridať</button></div>
+          </div>
+
+          ${rows.length ? `
+            <table class="table">
+              <thead><tr><th>Mesiac</th><th>Km</th><th>Litre</th><th>Spotreba</th></tr></thead>
+              <tbody>
+                ${rows.map(c=>`
+                  <tr>
+                    <td>${esc(c.month)}</td>
+                    <td><b>${money(c.km)}</b></td>
+                    <td>${money(c.liters)}</td>
+                    <td><b>${money(c.cons)} L/100</b></td>
+                  </tr>
+                `).join("")}
+              </tbody>
+            </table>
+          ` : `<div class="muted" style="margin-top:8px;">Zatiaľ bez uzávierok.</div>`}
+        </div>
+      </div>
+    `;
+  }
+
+  function renderMiniPlan(v){
+    const open=isMiniOpen(v.id,"plan");
+    const rows = (v.plans||[]).slice().sort((a,b)=>String(a.date).localeCompare(String(b.date)));
+    return `
+      <div class="section">
+        <div class="miniHead">
+          <span>📅 Plánovaný servis</span>
+          <button class="miniToggle" id="mini-plan-btn-${v.id}" type="button" onclick="toggleMini('${v.id}','plan')">${open?"▲":"▼"}</button>
+        </div>
+        <div class="miniBody" id="mini-plan-${v.id}" style="display:${open?"block":"none"};">
+          <div class="formline">
+            <div><div class="muted">Dátum</div><input id="pl-date-${v.id}" type="date" /></div>
+            <div class="full"><div class="muted">Popis</div><input id="pl-desc-${v.id}" /></div>
+            <div><button type="button" onclick="addPlan('${v.id}')">Pridať</button></div>
+          </div>
+
+          ${rows.length ? `
+            <table class="table">
+              <thead><tr><th>Dátum</th><th>Popis</th><th>Stav</th><th></th></tr></thead>
+              <tbody>
+                ${rows.map(p=>{
+                  const left=daysLeft(p.date);
+                  const pill = p.done ? `<span class="pill okpill">vykonané</span>`
+                    : (left===null ? `<span class="pill">—</span>`
+                      : left<0 ? `<span class="pill badpill">po termíne</span>`
+                      : left<=5 ? `<span class="pill warnpill">${left} dní</span>`
+                      : `<span class="pill okpill">${left} dní</span>`);
+                  return `
+                    <tr>
+                      <td>${esc(p.date)}</td>
+                      <td>${esc(p.description)}</td>
+                      <td>${pill}</td>
+                      <td class="actions">
+                        ${p.done ? "" : `<button class="ghost" type="button" onclick="markPlanDone('${p.id}','${v.id}')">Vykonané</button>`}
+                      </td>
+                    </tr>
+                  `;
+                }).join("")}
+              </tbody>
+            </table>
+          ` : `<div class="muted" style="margin-top:8px;">Zatiaľ bez plánov.</div>`}
+        </div>
+      </div>
+    `;
+  }
+
+  // =========================
+  // Dashboard charts
+  // =========================
+  function destroyChart(ch){ if(ch) ch.destroy(); return null; }
+
+  function initDashboardDates(){
+    const now=new Date();
+    const from=new Date(now.getFullYear(),now.getMonth(),1);
+    const to=new Date(now.getFullYear(),now.getMonth()+1,0);
+    $("dashFrom").value=isoDate(from);
+    $("dashTo").value=isoDate(to);
+    $("dashPreset").value="this_month";
+  }
+
+  $("dashPreset").addEventListener("change", ()=>{
+    const preset=$("dashPreset").value;
+    const now=new Date();
+    let from,to;
+    if(preset==="this_month"){ from=new Date(now.getFullYear(),now.getMonth(),1); to=new Date(now.getFullYear(),now.getMonth()+1,0); }
+    else if(preset==="last_month"){ from=new Date(now.getFullYear(),now.getMonth()-1,1); to=new Date(now.getFullYear(),now.getMonth(),0); }
+    else if(preset==="this_year"){ from=new Date(now.getFullYear(),0,1); to=new Date(now.getFullYear(),11,31); }
+    else return;
+    $("dashFrom").value=isoDate(from);
+    $("dashTo").value=isoDate(to);
+  });
+  $("dashApply").addEventListener("click", refreshDashboard);
+
+  function refreshDashboard(){
+    const center=$("centerFilter").value||"ALL";
+    const fromISO=$("dashFrom").value;
+    const toISO=$("dashTo").value;
+    if(!fromISO||!toISO) return;
+
+    const scope = vehicles.filter(v=> center==="ALL" ? true : String(v.center)===center);
+
+    let fuelSum=0, serviceSum=0;
+    for(const v of scope){
+      for(const f of (v.fuel||[])) if(f.date>=fromISO && f.date<=toISO) fuelSum+=num(f.total);
+      for(const s of (v.service||[])) if(s.date>=fromISO && s.date<=toISO) serviceSum+=num(s.cost);
+    }
+    const totalSum=fuelSum+serviceSum;
+
+    $("kpiFuel").textContent=money(fuelSum);
+    $("kpiService").textContent=money(serviceSum);
+    $("kpiTotal").textContent=money(totalSum);
+    $("kpiPeriod").textContent=`${fromISO} → ${toISO}`;
+    $("kpiCenter").textContent = center==="ALL" ? "Všetky strediská" : center;
+    $("kpiVehiclesSub").textContent = `${scope.length} vozidiel`;
+
+    // Chart by center
+    const centersAll=["Košice","Žilina","Nitra","Bratislava"];
+    const totalsByCenter=new Map(centersAll.map(c=>[c,0]));
+    for(const v of vehicles){
+      if(center!=="ALL" && v.center!==center) continue;
+      let sum=0;
+      for(const f of (v.fuel||[])) if(f.date>=fromISO && f.date<=toISO) sum+=num(f.total);
+      for(const s of (v.service||[])) if(s.date>=fromISO && s.date<=toISO) sum+=num(s.cost);
+      totalsByCenter.set(String(v.center), (totalsByCenter.get(String(v.center))||0)+sum);
+    }
+    const centerLabels = (center==="ALL") ? centersAll : [center];
+    const centerData = centerLabels.map(c=>Number((totalsByCenter.get(c)||0).toFixed(2)));
+
+    chartCenter=destroyChart(chartCenter);
+    chartCenter=new Chart(document.getElementById("chartByCenter"),{
+      type:"bar",
+      data:{labels:centerLabels,datasets:[{label:"Spolu (€)",data:centerData}]},
+      options:{responsive:true,plugins:{legend:{display:false}},scales:{y:{beginAtZero:true}}}
+    });
+
+    // Chart by month
+    const months=monthList(fromISO,toISO);
+    const fuelByMonth=new Map(months.map(m=>[m,0]));
+    const serviceByMonth=new Map(months.map(m=>[m,0]));
+
+    for(const v of scope){
+      for(const f of (v.fuel||[])){
+        if(f.date>=fromISO && f.date<=toISO){
+          const mk=monthKey(f.date);
+          if(fuelByMonth.has(mk)) fuelByMonth.set(mk, fuelByMonth.get(mk)+num(f.total));
+        }
+      }
+      for(const s of (v.service||[])){
+        if(s.date>=fromISO && s.date<=toISO){
+          const mk=monthKey(s.date);
+          if(serviceByMonth.has(mk)) serviceByMonth.set(mk, serviceByMonth.get(mk)+num(s.cost));
+        }
+      }
+    }
+
+    const fuelSeries=months.map(m=>Number((fuelByMonth.get(m)||0).toFixed(2)));
+    const serviceSeries=months.map(m=>Number((serviceByMonth.get(m)||0).toFixed(2)));
+    const totalSeries=months.map((m,i)=>Number((fuelSeries[i]+serviceSeries[i]).toFixed(2)));
+
+    chartMonth=destroyChart(chartMonth);
+    chartMonth=new Chart(document.getElementById("chartByMonth"),{
+      type:"line",
+      data:{labels:months,datasets:[
+        {label:"Palivo (€)",data:fuelSeries,borderWidth:2,pointRadius:2,spanGaps:true},
+        {label:"Servis (€)",data:serviceSeries,borderWidth:2,pointRadius:2,spanGaps:true},
+        {label:"Spolu (€)",data:totalSeries,borderWidth:3,pointRadius:2,spanGaps:true}
+      ]},
+      options:{responsive:true,plugins:{legend:{display:true}},scales:{y:{beginAtZero:true}}}
+    });
+
+    // Top 10
+    const rows=scope.map(v=>{
+      let f=0,s=0;
+      for(const x of (v.fuel||[])) if(x.date>=fromISO && x.date<=toISO) f+=num(x.total);
+      for(const x of (v.service||[])) if(x.date>=fromISO && x.date<=toISO) s+=num(x.cost);
+      return {spz:v.spz, model:v.model, center:v.center, fuel:f, service:s, total:f+s};
+    }).sort((a,b)=>b.total-a.total).slice(0,10);
+
+    $("topVehiclesBody").innerHTML = rows.length ? rows.map(r=>`
+      <tr>
+        <td><b>${esc(r.spz)}</b></td><td>${esc(r.model)}</td><td>${esc(r.center)}</td>
+        <td>${money(r.fuel)}</td><td>${money(r.service)}</td><td><b>${money(r.total)}</b></td>
+      </tr>`).join("") : `<tr><td colspan="6" class="muted">Žiadne dáta v období.</td></tr>`;
+  }
+
+  // =========================
+  // Load + render
+  // =========================
+  async function loadAndRenderAll(opts={}){
+    const keepOpenId=opts.keepOpenId||null;
+    await loadAllVehicles();
+    renderVehiclesAndAlerts();
+    if(keepOpenId){ setVehOpen(keepOpenId,true); applyOpenState(keepOpenId); }
+    refreshDashboard();
+  }
+
+  // =========================
+  // Expose for onclick
+  // =========================
+  window.toggleDetails=toggleDetails;
+  window.toggleMini=toggleMini;
+  window.jumpToVehicle=jumpToVehicle;
+  window.deleteVehicle=deleteVehicle;
+  window.addFuel=addFuel;
+  window.addService=addService;
+  window.addClosure=addClosure;
+  window.addPlan=addPlan;
+  window.markPlanDone=markPlanDone;
+
+  // =========================
+  // Start
+  // =========================
+  boot();
+</script>
+</body>
+</html>
